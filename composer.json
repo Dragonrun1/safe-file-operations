@@ -1,0 +1,32 @@
+{
+    "name": "dragonrun1/safe-file-operations",
+    "description": "Proves as completely safe read and write file operations as possible.",
+    "type": "library",
+    "license": "LGPL-3.0+",
+    "authors": [
+        {
+            "name": "Michael Cummings",
+            "email": "mgcummings@yahoo.com"
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "SaveFileOperations\\": [
+                "src/"
+            ]
+        }
+    },
+    "config": {
+        "optimize-autoloader": true
+    },
+    "minimum-stability": "stable",
+    "require": {
+        "php": ">7.0,<7.2",
+        "dragonrun1/file_path_normalizer": "^2.0"
+    },
+    "require-dev": {
+        "henrikbjorn/phpspec-code-coverage": "~3.0.1",
+        "phpspec/nyan-formatters": "~2.0.0",
+        "phpspec/phpspec": "~3.0.0"
+    }
+}
