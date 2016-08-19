@@ -10,3 +10,4 @@ composer.lock
 composer.phar
 junk*.*
 test*.*
+phpspec.yml

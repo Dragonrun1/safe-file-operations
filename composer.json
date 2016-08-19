@@ -11,8 +11,15 @@
     ],
     "autoload": {
         "psr-4": {
-            "SaveFileOperations\\": [
+            "SafeFileOperations\\": [
                 "src/"
+            ]
+        }
+    },
+    "autoload-dev": {
+        "psr-0": {
+            "Spec\\": [
+                "specs/"
             ]
         }
     },
