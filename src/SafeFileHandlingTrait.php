@@ -32,16 +32,31 @@ declare(strict_types = 1);
  * @license   http://www.gnu.org/copyleft/lesser.html GNU LGPL
  * @author    Michael Cummings <mgcummings@yahoo.com>
  */
-namespace SaveFileOperations;
+namespace SafeFileOperations;
 
+use FilePathNormalizer\FilePathNormalizerInterface;
 use FilePathNormalizer\FilePathNormalizerTrait;
 
 /**
- * Trait SaveFileHandlingTrait
+ * Trait SafeFileHandlingTrait
  */
-trait SaveFileHandlingTrait
+trait SafeFileHandlingTrait
 {
     use FilePathNormalizerTrait;
+    /**
+     * @return \Throwable
+     */
+    public function getSafeFileError(): \Throwable
+    {
+        return $this->safeFileError;
+    }
+    /**
+     * @return bool
+     */
+    public function hasSafeFileError(): bool
+    {
+        return null !== $this->safeFileError;
+    }
     /**
      * Safely read contents of file.
      *
@@ -51,17 +66,25 @@ trait SaveFileHandlingTrait
      *
      * @return false|string Returns the file contents or false for any problems that prevent it.
      */
-    protected function safeFileRead(string $pathFile, int $estimatedFileSize = 16777216)
+    public function safeFileRead(string $pathFile, int $estimatedFileSize = 16777216)
     {
+        $this->safeFileError = null;
         try {
             $pathFile = $this->getFpn()
-                ->normalizeFile($pathFile);
+                             ->normalizeFile($pathFile,
+                                 FilePathNormalizerInterface::ABSOLUTE_REQUIRED
+                                 | FilePathNormalizerInterface::WRAPPER_ALLOWED
+                             );
         } catch (\Throwable $exc) {
+            $this->safeFileError = new SafeFileError('Could not normalize path or file name',
+                SafeFileHandlingInterface::BAD_PATH_OR_FILE_ERROR, $exc);
             return false;
         }
         // Insure file info is fresh.
         clearstatcache(true, $pathFile);
         if (!is_readable($pathFile) || !is_file($pathFile)) {
+            $this->safeFileError = new SafeFileError('Was not given accessible file',
+                SafeFileHandlingInterface::UNREADABLE_FILE_ERROR);
             return false;
         }
         return $this->safeDataRead($pathFile, $estimatedFileSize);
@@ -75,28 +98,42 @@ trait SaveFileHandlingTrait
      *
      * @return bool Returns true if contents written, false on any problem that prevents write.
      */
-    protected function safeFileWrite(string $pathFile, string $data): bool
+    public function safeFileWrite(string $pathFile, string $data): bool
     {
+        $this->safeFileError = null;
         try {
             $pathFile = $this->getFpn()
-                ->normalizeFile($pathFile);
+                             ->normalizeFile($pathFile,
+                                 FilePathNormalizerInterface::ABSOLUTE_REQUIRED
+                                 | FilePathNormalizerInterface::WRAPPER_ALLOWED
+                             );
         } catch (\Throwable $exc) {
+            $this->safeFileError = new SafeFileError('Could not normalize path or file name',
+                SafeFileHandlingInterface::BAD_PATH_OR_FILE_ERROR, $exc);
             return false;
         }
         $path = dirname($pathFile);
         $baseFile = basename($pathFile);
         if (false === $this->isWritablePath($path)) {
+            $this->safeFileError = new SafeFileError('Given non-writable path for file',
+                SafeFileHandlingInterface::BAD_PATH_OR_FILE_ERROR);
             return false;
         }
         if (false === $this->deleteWithRetry($pathFile)) {
+            $this->safeFileError = new SafeFileError('Could not delete file before re-writing',
+                SafeFileHandlingInterface::WRITE_FILE_ERROR, $this->safeFileError);
             return false;
         }
         $handle = $this->acquireLockedHandle($pathFile);
         if (false === $handle) {
+            $this->safeFileError = new SafeFileError('Could not acquire locked file handle before re-writing',
+                SafeFileHandlingInterface::WRITE_FILE_ERROR, $this->safeFileError);
             return false;
         }
         $tmpFile = sprintf('%1$s/%2$s.tmp', $path, hash('sha1', $baseFile . random_bytes(8)));
         if (false === $this->safeDataWrite($tmpFile, $data)) {
+            $this->safeFileError = new SafeFileError('Failed while writing to tmp file',
+                SafeFileHandlingInterface::WRITE_FILE_ERROR, $this->safeFileError);
             $this->releaseHandle($handle);
             return false;
         }
@@ -121,6 +158,8 @@ trait SaveFileHandlingTrait
     {
         $handle = fopen($pathFile, $mode, false);
         if (false === $handle) {
+            $this->safeFileError = new SafeFileError('Could not get file handle',
+                SafeFileHandlingInterface::ACQUIRE_HANDLE_ERROR);
             return false;
         }
         if (false === $this->acquiredLock($handle, $timeout)) {
@@ -150,6 +189,8 @@ trait SaveFileHandlingTrait
         $tries = 0;
         while (!flock($handle, LOCK_EX | LOCK_NB)) {
             if (++$tries > $maxTries || time() > $timeout) {
+                $this->safeFileError = new SafeFileError('Exceeded exclusive lock time or try limit',
+                    SafeFileHandlingInterface::LOCK_LIMITS_EXCEEDED_ERROR);
                 return false;
             }
             // Randomize to help prevent deadlocks.
@@ -181,6 +222,8 @@ trait SaveFileHandlingTrait
                 fclose($handle);
             }
             if (++$tries > 10) {
+                $this->safeFileError = new SafeFileError('Exceeded delete file try limit',
+                    SafeFileHandlingInterface::DELETE_LIMIT_EXCEEDED_ERROR);
                 return false;
             }
             // Wait 0.01 to 0.5 seconds before trying again.
@@ -246,6 +289,8 @@ trait SaveFileHandlingTrait
         $timeout = time() + $timeout;
         while (!feof($handle)) {
             if (++$tries > 10 || time() > $timeout) {
+                $this->safeFileError = new SafeFileError('Exceeded file reading time or try limit',
+                    SafeFileHandlingInterface::READ_LIMITS_EXCEEDED_ERROR);
                 $this->releaseHandle($handle);
                 return false;
             }
@@ -291,6 +336,8 @@ trait SaveFileHandlingTrait
         $timeout = time() + $timeout;
         while ($dataWritten < $amountToWrite) {
             if (++$tries > 10 || time() > $timeout) {
+                $this->safeFileError = new SafeFileError('Exceeded file writing time or try limit',
+                    SafeFileHandlingInterface::READ_LIMITS_EXCEEDED_ERROR);
                 $this->releaseHandle($handle);
                 $this->deleteWithRetry($pathFile);
                 return false;
@@ -305,4 +352,8 @@ trait SaveFileHandlingTrait
         $this->releaseHandle($handle);
         return true;
     }
+    /**
+     * @var \Throwable $safeFileError
+     */
+    private $safeFileError;
 }
