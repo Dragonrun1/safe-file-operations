@@ -1,0 +1,36 @@
+code_generation: false
+formatter.name: dot
+stop-on-failure: true
+suites:
+    sfo_suite:
+        namespace: SaveFileOperations
+        psr4_prefix: SaveFileOperations
+        spec_path: %paths.config%/specs
+        spec_prefix: Spec
+        src_path: %paths.config%/src
+extensions:
+    PhpSpecCodeCoverage\CodeCoverageExtension:
+        whitelist:
+            - lib
+        blacklist:
+            - bin
+            - build
+            - composer
+            - docs
+            - specs
+            - tests
+            - vendor
+        blacklist_files:
+            - bootstrap.php
+            - UtilRegisterKey.php
+            - yapeal.php
+            - yc.php
+            - "Mock*.php"
+            - "*Spec.php"
+            - "*Test.php"
+            - "junk*.*"
+            - "test*.*"
+        format:
+            - clover
+        output:
+            clover: build/clover.xml
