@@ -3,15 +3,15 @@ formatter.name: dot
 stop-on-failure: true
 suites:
     sfo_suite:
-        namespace: SaveFileOperations
-        psr4_prefix: SaveFileOperations
+        namespace: SafeFileOperations
+        psr4_prefix: SafeFileOperations
         spec_path: %paths.config%/specs
         spec_prefix: Spec
         src_path: %paths.config%/src
 extensions:
     PhpSpecCodeCoverage\CodeCoverageExtension:
         whitelist:
-            - lib
+            - src
         blacklist:
             - bin
             - build

@@ -18,7 +18,7 @@
     },
     "autoload-dev": {
         "psr-0": {
-            "Spec\\": [
+            "Spec\\SafeFileOperations\\": [
                 "specs/"
             ]
         }
