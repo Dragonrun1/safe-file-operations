@@ -42,21 +42,7 @@ use FilePathNormalizer\FilePathNormalizerTrait;
  */
 trait SafeFileHandlingTrait
 {
-    use FilePathNormalizerTrait;
-    /**
-     * @return \Throwable
-     */
-    public function getSafeFileError(): \Throwable
-    {
-        return $this->safeFileError;
-    }
-    /**
-     * @return bool
-     */
-    public function hasSafeFileError(): bool
-    {
-        return null !== $this->safeFileError;
-    }
+    use FilePathNormalizerTrait, SharedFileMethodsTrait;
     /**
      * Safely read contents of file.
      *
@@ -66,9 +52,9 @@ trait SafeFileHandlingTrait
      *
      * @return false|string Returns the file contents or false for any problems that prevent it.
      */
-    public function safeFileRead(string $pathFile, int $estimatedFileSize = 16777216)
+    public function fileRead(string $pathFile, int $estimatedFileSize = 16777216)
     {
-        $this->safeFileError = null;
+        $this->setFileError(null);
         try {
             $pathFile = $this->getFpn()
                              ->normalizeFile($pathFile,
@@ -76,15 +62,15 @@ trait SafeFileHandlingTrait
                                  | FilePathNormalizerInterface::WRAPPER_ALLOWED
                              );
         } catch (\Throwable $exc) {
-            $this->safeFileError = new SafeFileError('Could not normalize path or file name',
-                SafeFileHandlingInterface::BAD_PATH_OR_FILE_ERROR, $exc);
+            $this->setFileError(new SafeFileError('Could not normalize path or file name',
+                ErrorHandlingInterface::BAD_PATH_OR_FILE_ERROR, $exc));
             return false;
         }
         // Insure file info is fresh.
         clearstatcache(true, $pathFile);
         if (!is_readable($pathFile) || !is_file($pathFile)) {
-            $this->safeFileError = new SafeFileError('Was not given accessible file',
-                SafeFileHandlingInterface::UNREADABLE_FILE_ERROR);
+            $this->setFileError(new SafeFileError('Was not given accessible file',
+                ErrorHandlingInterface::UNREADABLE_FILE_ERROR));
             return false;
         }
         return $this->safeDataRead($pathFile, $estimatedFileSize);
@@ -98,9 +84,9 @@ trait SafeFileHandlingTrait
      *
      * @return bool Returns true if contents written, false on any problem that prevents write.
      */
-    public function safeFileWrite(string $pathFile, string $data): bool
+    public function fileWrite(string $pathFile, string $data): bool
     {
-        $this->safeFileError = null;
+        $this->setFileError(null);
         try {
             $pathFile = $this->getFpn()
                              ->normalizeFile($pathFile,
@@ -108,153 +94,38 @@ trait SafeFileHandlingTrait
                                  | FilePathNormalizerInterface::WRAPPER_ALLOWED
                              );
         } catch (\Throwable $exc) {
-            $this->safeFileError = new SafeFileError('Could not normalize path or file name',
-                SafeFileHandlingInterface::BAD_PATH_OR_FILE_ERROR, $exc);
+            $this->setFileError(new SafeFileError('Could not normalize path or file name',
+                ErrorHandlingInterface::BAD_PATH_OR_FILE_ERROR, $exc));
             return false;
         }
         $path = dirname($pathFile);
         $baseFile = basename($pathFile);
         if (false === $this->isWritablePath($path)) {
-            $this->safeFileError = new SafeFileError('Given non-writable path for file',
-                SafeFileHandlingInterface::BAD_PATH_OR_FILE_ERROR);
+            $this->setFileError(new SafeFileError('Given non-writable path for file',
+                ErrorHandlingInterface::BAD_PATH_OR_FILE_ERROR));
             return false;
         }
         if (false === $this->deleteWithRetry($pathFile)) {
-            $this->safeFileError = new SafeFileError('Could not delete file before re-writing',
-                SafeFileHandlingInterface::WRITE_FILE_ERROR, $this->safeFileError);
+            $this->setFileError(new SafeFileError('Could not delete file before re-writing',
+                ErrorHandlingInterface::WRITE_FILE_ERROR, $this->fileError));
             return false;
         }
         $handle = $this->acquireLockedHandle($pathFile);
         if (false === $handle) {
-            $this->safeFileError = new SafeFileError('Could not acquire locked file handle before re-writing',
-                SafeFileHandlingInterface::WRITE_FILE_ERROR, $this->safeFileError);
+            $this->setFileError(new SafeFileError('Could not acquire locked file handle before re-writing',
+                ErrorHandlingInterface::WRITE_FILE_ERROR, $this->fileError));
             return false;
         }
         $tmpFile = sprintf('%1$s/%2$s.tmp', $path, hash('sha1', $baseFile . random_bytes(8)));
         if (false === $this->safeDataWrite($tmpFile, $data)) {
-            $this->safeFileError = new SafeFileError('Failed while writing to tmp file',
-                SafeFileHandlingInterface::WRITE_FILE_ERROR, $this->safeFileError);
+            $this->setFileError(new SafeFileError('Failed while writing to tmp file',
+                ErrorHandlingInterface::WRITE_FILE_ERROR, $this->fileError));
             $this->releaseHandle($handle);
             return false;
         }
         $renamed = rename($tmpFile, $pathFile);
         $this->releaseHandle($handle);
         return $renamed;
-    }
-    /**
-     * Used to acquire a exclusively locked file handle with a given mode and time limit.
-     *
-     * @param string $pathFile Name of file locked file handle is for.
-     * @param string $mode     Mode to open handle with. Default will create
-     *                         the file if it does not exist. 'b' option should
-     *                         always be used to insure cross OS compatibility.
-     * @param int    $timeout  Time it seconds used while trying to get lock.
-     *                         Will be internally limited between 2 and 16
-     *                         seconds.
-     *
-     * @return false|resource Returns exclusively locked file handle resource or false on errors.
-     */
-    private function acquireLockedHandle(string $pathFile, string $mode = 'cb+', int $timeout = 2)
-    {
-        $handle = fopen($pathFile, $mode, false);
-        if (false === $handle) {
-            $this->safeFileError = new SafeFileError('Could not get file handle',
-                SafeFileHandlingInterface::ACQUIRE_HANDLE_ERROR);
-            return false;
-        }
-        if (false === $this->acquiredLock($handle, $timeout)) {
-            $this->releaseHandle($handle);
-            return false;
-        }
-        return $handle;
-    }
-    /**
-     * Used to acquire file handle lock that limits the time and number of tries to do so.
-     *
-     * @param resource $handle  File handle to acquire exclusive lock for.
-     * @param int      $timeout Maximum time in seconds to wait for lock.
-     *                          Internally limited between 2 and 16 seconds.
-     *                          Also determines how many tries to make.
-     *
-     * @return bool
-     */
-    private function acquiredLock($handle, int $timeout): bool
-    {
-        $timeout = min(16, max(2, $timeout));
-        //Give max of $timeout seconds or 2 * $timeout tries to getting lock.
-        $timeout = time() + $timeout;
-        $maxTries = 2 * $timeout;
-        $minWait = 25000;
-        $maxWait = $minWait * $maxTries;
-        $tries = 0;
-        while (!flock($handle, LOCK_EX | LOCK_NB)) {
-            if (++$tries > $maxTries || time() > $timeout) {
-                $this->safeFileError = new SafeFileError('Exceeded exclusive lock time or try limit',
-                    SafeFileHandlingInterface::LOCK_LIMITS_EXCEEDED_ERROR);
-                return false;
-            }
-            // Randomize to help prevent deadlocks.
-            usleep(random_int($minWait, $maxWait));
-        }
-        return true;
-    }
-    /**
-     * Used to delete a file when unlink might fail and it needs to be retried.
-     *
-     * @param string $pathFile File name with absolute path.
-     *
-     * @return bool
-     */
-    private function deleteWithRetry(string $pathFile): bool
-    {
-        clearstatcache(true, $pathFile);
-        if (!is_file($pathFile)) {
-            return true;
-        }
-        // Acquire exclusive access to file to help prevent conflicts when deleting.
-        $handle = $this->acquireLockedHandle($pathFile, 'rb+');
-        $tries = 0;
-        do {
-            if (is_resource($handle)) {
-                ftruncate($handle, 0);
-                rewind($handle);
-                flock($handle, LOCK_UN);
-                fclose($handle);
-            }
-            if (++$tries > 10) {
-                $this->safeFileError = new SafeFileError('Exceeded delete file try limit',
-                    SafeFileHandlingInterface::DELETE_LIMIT_EXCEEDED_ERROR);
-                return false;
-            }
-            // Wait 0.01 to 0.5 seconds before trying again.
-            usleep(random_int(10000, 500000));
-        } while (false === unlink($pathFile));
-        clearstatcache(true, $pathFile);
-        return true;
-    }
-    /**
-     * Checks that path is readable, writable, and a directory.
-     *
-     * @param string $path Absolute path to be checked.
-     *
-     * @return bool Return true for writable directory else false.
-     */
-    private function isWritablePath(string $path): bool
-    {
-        clearstatcache(true, $path);
-        return is_readable($path) && is_dir($path) && is_writable($path);
-    }
-    /**
-     * @param resource $handle
-     *
-     * @return void
-     */
-    private function releaseHandle($handle)
-    {
-        if (is_resource($handle)) {
-            flock($handle, LOCK_UN);
-            fclose($handle);
-        }
     }
     /**
      * Reads data from the named file while insuring it either receives full contents or fails.
@@ -289,8 +160,8 @@ trait SafeFileHandlingTrait
         $timeout = time() + $timeout;
         while (!feof($handle)) {
             if (++$tries > 10 || time() > $timeout) {
-                $this->safeFileError = new SafeFileError('Exceeded file reading time or try limit',
-                    SafeFileHandlingInterface::READ_LIMITS_EXCEEDED_ERROR);
+                $this->setFileError(new SafeFileError('Exceeded file reading time or try limit',
+                    ErrorHandlingInterface::READ_LIMITS_EXCEEDED_ERROR));
                 $this->releaseHandle($handle);
                 return false;
             }
@@ -336,8 +207,8 @@ trait SafeFileHandlingTrait
         $timeout = time() + $timeout;
         while ($dataWritten < $amountToWrite) {
             if (++$tries > 10 || time() > $timeout) {
-                $this->safeFileError = new SafeFileError('Exceeded file writing time or try limit',
-                    SafeFileHandlingInterface::READ_LIMITS_EXCEEDED_ERROR);
+                $this->setFileError(new SafeFileError('Exceeded file writing time or try limit',
+                    ErrorHandlingInterface::READ_LIMITS_EXCEEDED_ERROR));
                 $this->releaseHandle($handle);
                 $this->deleteWithRetry($pathFile);
                 return false;
@@ -352,8 +223,4 @@ trait SafeFileHandlingTrait
         $this->releaseHandle($handle);
         return true;
     }
-    /**
-     * @var \Throwable $safeFileError
-     */
-    private $safeFileError;
 }
