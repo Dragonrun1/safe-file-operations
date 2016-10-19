@@ -9,12 +9,6 @@ use SafeFileOperations\SafeFileError;
  * Class SafeFileErrorSpec
  *
  * @mixin \SafeFileOperations\SafeFileError
- *
- * @method void during($method, array $params)
- * @method void shouldBe($value)
- * @method void shouldContain($value)
- * @method void shouldNotEqual($value)
- * @method void shouldReturn($result)
  */
 class SafeFileErrorSpec extends ObjectBehavior
 {
@@ -25,5 +19,45 @@ class SafeFileErrorSpec extends ObjectBehavior
     public function let()
     {
         $this->beConstructedWith('');
+    }
+    public function it_should_initially_have_empty_message_and_default_code()
+    {
+        $this->getMessage()->shouldReturn('');
+        $this->getCode()->shouldReturn(0);
+    }
+    public function it_should_initially_return_default_error_message_when_used_as_string()
+    {
+        /** @noinspection ImplicitMagicMethodCallInspection */
+        $this->__toString()->shouldStartWith('SafeFileOperations\SafeFileError: (0)  in ');
+    }
+    public function it_should_return_same_error_message_when_used_as_string()
+    {
+        $message = 'test error';
+        $this->beConstructedWith($message);
+        $expected = 'SafeFileOperations\SafeFileError: (0) ' . $message . ' in ';
+        /** @noinspection ImplicitMagicMethodCallInspection */
+        $this->__toString()
+             ->shouldStartWith($expected);
+    }
+    public function it_should_return_same_error_code_when_used_as_string()
+    {
+        $message = 'test error';
+        $code = 1;
+        $this->beConstructedWith($message, $code);
+        $expected = 'SafeFileOperations\SafeFileError: (' . $code . ') ' . $message . ' in ';
+        /** @noinspection ImplicitMagicMethodCallInspection */
+        $this->__toString()
+             ->shouldStartWith($expected);
+    }
+    public function it_should_return_thrown_stack_when_used_as_string()
+    {
+        $message = 'test error';
+        $code = 1;
+        $previous = new \LogicException($message, $code);
+        $this->beConstructedWith($message, $code, $previous);
+        $expected = 'Thrown stack:' . PHP_EOL . 'LogicException: (' . $code . ') ' . $message . ' in ';
+        /** @noinspection ImplicitMagicMethodCallInspection */
+        $this->__toString()
+             ->shouldStartWith($expected);
     }
 }

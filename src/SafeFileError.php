@@ -39,6 +39,7 @@ namespace SafeFileOperations;
 class SafeFileError extends \Error
 {
     /** @noinspection MoreThanThreeArgumentsInspection */
+    /** @noinspection MagicMethodsValidityInspection */
     /**
      * SafeFileError constructor.
      *
@@ -55,32 +56,31 @@ class SafeFileError extends \Error
         string $file = __FILE__,
         int $line = __LINE__
     ) {
-        $this->message = $message;
-        $this->code = $code;
         $this->file = $file;
         $this->line = $line;
-        $this->previous = $previous;
         $this->trace = debug_backtrace();
+        parent::__construct($message, $code, $previous);
     }
     public function __toString(): string
     {
-        $format = '%1$s: (%2$s) %3$s in %4$s:%5$s' . PHP_EOL . 'Stack trace:' . PHP_EOL;
+        $format = '%1$s: (%2$s) %3$s in %4$s:%5$s';
         $mess = '';
-        $previous = $this->previous;
-        if (null !== $previous) {
-            $mess .= 'Previously caught:' . PHP_EOL;
-            $mess .= sprintf($format, $this->getThrowableType($previous), $previous->getCode(), $previous->getMessage(),
-                    $previous->getFile(), $previous->getLine())
-                . $previous->getTraceAsString() . PHP_EOL . PHP_EOL;
+        $previous = $this->getPrevious();
+        $stack = [];
+        while (null !== $previous) {
+            $stack[] = sprintf($format, $this->getThrowableType($previous), $previous->getCode(),
+                $previous->getMessage(), $previous->getFile(), $previous->getLine());
+            $previous = $previous->getPrevious();
         }
+        if (count($stack)) {
+            $mess .= 'Thrown stack:' . PHP_EOL;
+            $mess .= implode(PHP_EOL, array_reverse($stack)) . PHP_EOL;
+        }
+        $format .= PHP_EOL . 'Stack trace:' . PHP_EOL;
         $mess .= sprintf($format, $this->getThrowableType($this), $this->getCode(), $this->getMessage(),
             $this->getFile(), $this->getLine());
         return $mess . $this->getTraceAsString();
     }
-    /**
-     * @var int $code
-     */
-    protected $code;
     /**
      * @var string $file
      */
@@ -89,14 +89,6 @@ class SafeFileError extends \Error
      * @var int $line
      */
     protected $line;
-    /**
-     * @var string $message
-     */
-    protected $message;
-    /**
-     * @var null|\Throwable $previous
-     */
-    protected $previous;
     /**
      * @var array $trace
      */

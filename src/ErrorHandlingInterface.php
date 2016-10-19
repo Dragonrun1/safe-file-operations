@@ -1,7 +1,7 @@
 <?php
 declare(strict_types = 1);
 /**
- * Contains interface SafeFileHandlingInterface.
+ * Contains interface ErrorHandlingInterface.
  *
  * PHP version 7.0+
  *
@@ -34,46 +34,29 @@ declare(strict_types = 1);
 namespace SafeFileOperations;
 
 /**
- * Interface SafeFileHandling.
+ * Interface ErrorHandlingInterface.
  */
-interface SafeFileHandlingInterface
+interface ErrorHandlingInterface
 {
+    const NO_ERROR = 0;
     const ACQUIRE_HANDLE_ERROR = 1;
     const BAD_PATH_OR_FILE_ERROR = 2;
     const BAD_WRITE_PATH_ERROR = 3;
-    const DELETE_LIMIT_EXCEEDED_ERROR = 4;
-    const LOCK_LIMITS_EXCEEDED_ERROR = 5;
-    const NO_ERROR = 0;
-    const READ_LIMITS_EXCEEDED_ERROR = 6;
-    const UNREADABLE_FILE_ERROR = 7;
-    const WRITE_FILE_ERROR = 8;
-    const WRITE_LIMITS_EXCEEDED_ERROR = 9;
+    const DATA_READ_ERROR = 4;
+    const DATA_WRITE_ERROR = 5;
+    const DELETE_LIMIT_EXCEEDED_ERROR = 6;
+    const LOCK_LIMITS_EXCEEDED_ERROR = 7;
+    const READ_LIMITS_EXCEEDED_ERROR = 8;
+    const REWIND_FILE_ERROR = 9;
+    const UNREADABLE_FILE_ERROR = 10;
+    const WRITE_FILE_ERROR = 11;
+    const WRITE_LIMITS_EXCEEDED_ERROR = 12;
     /**
      * @return \Throwable
      */
-    public function getSafeFileError(): \Throwable;
+    public function getFileError(): \Throwable;
     /**
      * @return bool
      */
-    public function hasSafeFileError(): bool;
-    /**
-     * Safely read contents of file.
-     *
-     * @param string $pathFile          File name with absolute path.
-     * @param int    $estimatedFileSize This is used to calculate the read buffer size to use as well as the
-     *                                  proportional timeouts.
-     *
-     * @return false|string Returns the file contents or false for any problems that prevent it.
-     */
-    public function safeFileRead(string $pathFile, int $estimatedFileSize = 16777216);
-    /**
-     * Safely write file using lock and temp file.
-     *
-     * @param string $pathFile File name with absolute path.
-     *
-     * @param string $data     Contents to be written to file.
-     *
-     * @return bool Returns true if contents written, false on any problem that prevents write.
-     */
-    public function safeFileWrite(string $pathFile, string $data) : bool;
+    public function hasFileError(): bool;
 }

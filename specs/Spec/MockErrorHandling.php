@@ -1,7 +1,7 @@
 <?php
 declare(strict_types = 1);
 /**
- * Contains class MockSafeFileHandlingTrait.
+ * Contains class MockErrorHandling.
  *
  * PHP version 7.0+
  *
@@ -33,9 +33,17 @@ declare(strict_types = 1);
  */
 namespace Spec\SafeFileOperations;
 
+use SafeFileOperations\ErrorHandlingInterface;
+use SafeFileOperations\ErrorHandlingTrait;
+
 /**
- * Class MockSafeFileHandlingTrait.
+ * Class MockErrorHandling.
  */
-class MockSafeFileHandlingTrait
+class MockErrorHandling implements ErrorHandlingInterface
 {
+    use ErrorHandlingTrait;
+    public function setError(\Throwable $throwable = null)
+    {
+        $this->setFileError($throwable);
+    }
 }
